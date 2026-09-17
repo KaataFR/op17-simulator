@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 220">
+  <rect width="300" height="220" rx="18" fill="#8d7958" fill-opacity=".38"/>
+  <g fill="none" stroke="#20180f" stroke-opacity=".45" stroke-width="2">
+    <path d="M15 38c55 9 62 54 119 60s98-33 151-10M34 163c49-38 81-1 129-19s59-48 108-34"/>
+    <path d="M47 18l208 187M18 184L276 40" stroke-width="1"/>
+    <circle cx="203" cy="76" r="24"/><path d="M203 48v56M175 76h56"/>
+  </g>
+  <text x="165" y="130" fill="#251b10" fill-opacity=".55" font-family="Georgia,serif" font-size="30" transform="rotate(-8 165 130)">ONE PIECE</text>
+</svg>

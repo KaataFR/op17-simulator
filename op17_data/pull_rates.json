@@ -1,0 +1,100 @@
+{
+  "standard_SR_per_display": 7,
+  "standard_DON_per_display": 2,
+  "premium_hits_above_SR_per_display": {
+    "range": [
+      1,
+      4
+    ]
+  },
+  "premium_hits_above_SR_per_case": {
+    "approx": 22
+  },
+  "alt_art_parallel_per_case": {
+    "approx": 10
+  },
+  "alt_art_leader_per_case": {
+    "approx": 4
+  },
+  "SEC_per_case": {
+    "approx": 5
+  },
+  "SEC_per_display": {
+    "range": [
+      0.333333,
+      0.5
+    ]
+  },
+  "SP_haki_per_case": {
+    "approx": 1
+  },
+  "SP_gold_per_case": {
+    "approx": 1
+  },
+  "special_DON_per_case": {
+    "approx": 2
+  },
+  "treasure_rare_per_case": {
+    "approx": 1,
+    "guaranteed": false
+  },
+  "pandaman_secret_alt_per_case": {
+    "range": [
+      6,
+      8
+    ]
+  },
+  "audited_rates": {
+    "manga_tier": {
+      "observed_boxes_range": [
+        36,
+        48
+      ],
+      "simulator_boxes": 48,
+      "confidence": "medium"
+    },
+    "pirate_crew_super_parallel": {
+      "approx_boxes": 338,
+      "simulator_boxes": 338,
+      "confidence": "low"
+    },
+    "super_leader_parallel": {
+      "simulator_boxes": 48,
+      "confidence": "low",
+      "note": "No isolated consensus rate; conservative simulation placeholder."
+    },
+    "red_super_alt": {
+      "approx_boxes": 96,
+      "simulator_boxes": 96,
+      "confidence": "low"
+    },
+    "treasure_rare": {
+      "approx_boxes": 12,
+      "confidence": "medium"
+    }
+  },
+  "audit_date": "2026-09-10",
+  "notes": "Community-observed OP17 EN/FR simulation parameters. Bandai publishes no official numerical pull-rate table. V11.7 uses conservative case-level calibration and hides unopened hit counts.",
+  "sources": [
+    {
+      "name": "TCGTalk OP17 Pull Rates & Case Opening",
+      "url": "https://tcgtalk.com/guides/op17-pull-rates-case-opening",
+      "sample": "1000+ packs / 3 cases + additional boxes"
+    },
+    {
+      "name": "Shop-TCG.fr OP17 pull rate",
+      "url": "https://shop-tcg.fr/blog/one-piece-op17-pull-rate-taux-de-tirage/",
+      "sample": "~7 cases FR/EN, community/live compilation"
+    },
+    {
+      "name": "OnePiece Terminal OP17 pull-rate model",
+      "url": "https://onepiece.app/set/OP17",
+      "sample": "community-observed model"
+    },
+    {
+      "name": "Samurai Sword Tokyo OP17 pull rates",
+      "url": "https://samuraiswordtokyo.com/blogs/news/op-17-pull-rates-best-cards",
+      "sample": "launch-week community estimates; rarest tiers conflicting"
+    }
+  ]
+}

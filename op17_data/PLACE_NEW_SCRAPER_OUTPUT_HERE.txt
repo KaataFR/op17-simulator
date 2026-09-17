@@ -1,0 +1,14 @@
+Place ici la sortie de ton nouveau scraper :
+
+op17_data/
+  cards.json
+  cards.csv
+  pull_rates.json
+  manifest.json
+  images/
+
+Commande attendue :
+python op17_scraper.py --out ./op17_data --cardmarket-browser
+
+V10 charge ./op17_data/cards.json en priorité.
+Si ce fichier est absent, elle bascule sur ./data_fallback/cards.json pour rester testable.
