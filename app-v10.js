@@ -1,6 +1,25 @@
 (() => {
   'use strict';
 
+  let storageWarning = false;
+  const storage = {
+    getItem(key) { try { return window.localStorage.getItem(key); } catch { return null; } },
+    setItem(key,value) { try { window.localStorage.setItem(key,value); } catch { if (!storageWarning) { storageWarning = true; toast('Sauvegarde indisponible : cette session ne sera pas conservée.'); } } },
+    removeItem(key) { try { window.localStorage.removeItem(key); } catch {} },
+    key(index) { try { return window.localStorage.key(index); } catch { return null; } },
+    get length() { try { return window.localStorage.length; } catch { return 0; } }
+  };
+  const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const reducedMotion = () => document.documentElement.dataset.motion === 'reduced';
+  const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+  let openingToken = 0;
+  let modalReturnFocus = null;
+  function toast(message) {
+    const node = document.getElementById('appToast');
+    if (!node) return;
+    node.textContent = message; node.hidden = false;
+    clearTimeout(toast.timer); toast.timer = setTimeout(() => node.hidden = true, 3200);
+  }
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => [...document.querySelectorAll(selector)];
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -12,6 +31,7 @@
     .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 
   const els = {
+    nextCardBtn: $('#nextCardBtn'), keepCardBtn: $('#keepCardBtn'), revealAllBtn: $('#revealAllBtn'), previewCardBtn: $('#previewCardBtn'), reduceMotion: $('#reduceMotion'),
     tabs: $$('.tab'), openingScreen: $('#openingScreen'), infoScreen: $('#infoScreen'), collectionScreen: $('#collectionScreen'),
     tableSurface: $('#tableSurface'), tableCards: $('#tableCards'), tableEmpty: $('#tableEmpty'), tableValue: $('#tableValue'), openedCountTable: $('#openedCountTable'),
     openingPanel: $('#openingPanel'), packHome: $('#packHome'), packStage: $('#packStage'), packBody: $('#packBody'), packTear: $('#packTear'), packFlash: $('#packFlash'), packParticles: $('#packParticles'),
@@ -38,36 +58,36 @@
   const state = {
     cards: [], rates: {}, source: '', engine: null,
     currentPack: null, currentPackMode: null, cardIndex: 0, inspectCard: null,
-    randomOpened: Number(localStorage.getItem(RANDOM_OPENED_KEY) || 0),
-    displayOpenedTotal: Number(localStorage.getItem(DISPLAY_OPENED_TOTAL_KEY) || 0),
-    tableItems: [], interactionToken: 0, audio: null, isAnimating: false,
-    sfxEnabled: localStorage.getItem(SFX_ENABLED_KEY) !== '0', sfxVolume: clamp(Number(localStorage.getItem(SFX_VOLUME_KEY) ?? 0.35), 0, 1), sfxPool: {}, lastRevealKey: null,
-    openingMode: localStorage.getItem(MODE_KEY) === 'display' ? 'display' : 'single',
+    randomOpened: Number(storage.getItem(RANDOM_OPENED_KEY) || 0),
+    displayOpenedTotal: Number(storage.getItem(DISPLAY_OPENED_TOTAL_KEY) || 0),
+    tableItems: [], transitionBusy: false, interactionToken: 0, audio: null, isAnimating: false,
+    sfxEnabled: storage.getItem(SFX_ENABLED_KEY) !== '0', sfxVolume: clamp(Number(storage.getItem(SFX_VOLUME_KEY) ?? 0.35), 0, 1), sfxPool: {}, lastRevealKey: null,
+    openingMode: storage.getItem(MODE_KEY) === 'display' ? 'display' : 'single',
     collection: loadCollection(), binderPage: 0,
     displayHistory: loadDisplayHistory(), displayHistoryRecorded: false,
   };
 
   function loadCollection() {
     try {
-      const raw = JSON.parse(localStorage.getItem(COLLECTION_KEY) || '{}');
+      const raw = JSON.parse(storage.getItem(COLLECTION_KEY) || '{}');
       return raw && typeof raw === 'object' ? raw : {};
     } catch (_) { return {}; }
   }
 
   function saveCollection() {
-    try { localStorage.setItem(COLLECTION_KEY, JSON.stringify(state.collection)); } catch (_) {}
+    try { storage.setItem(COLLECTION_KEY, JSON.stringify(state.collection)); } catch (_) {}
   }
 
 
   function loadDisplayHistory() {
     try {
-      const raw = JSON.parse(localStorage.getItem(DISPLAY_HISTORY_KEY) || '[]');
+      const raw = JSON.parse(storage.getItem(DISPLAY_HISTORY_KEY) || '[]');
       return Array.isArray(raw) ? raw : [];
     } catch (_) { return []; }
   }
 
   function saveDisplayHistory() {
-    try { localStorage.setItem(DISPLAY_HISTORY_KEY, JSON.stringify(state.displayHistory)); } catch (_) {}
+    try { storage.setItem(DISPLAY_HISTORY_KEY, JSON.stringify(state.displayHistory)); } catch (_) {}
   }
 
   function collectionKey(card) {
@@ -96,6 +116,11 @@
     els.packHome.hidden = name !== 'home';
     els.cardReveal.hidden = name !== 'card';
     els.packSummary.hidden = name !== 'summary';
+    const changed = els.openingPanel.dataset.view !== name;
+    els.openingPanel.dataset.view = name;
+    if (changed && window.innerWidth <= 760 && name !== 'home') requestAnimationFrame(() => els.openingPanel.scrollIntoView({block:'start',behavior:'instant'}));
+    if (name === 'summary') { els.openAnotherBtn.focus({preventScroll:true}); }
+    if (name === 'card') { els.nextCardBtn.focus({preventScroll:true}); }
   }
 
   function tableTotalValue() {
@@ -155,7 +180,19 @@
   }
 
   function cardImageSrc(card) {
-    return card?.image || card?.image_url || card?.fallbackImage || './assets/card-back-blue.png';
+    return card?.fallbackImage || card?.image || card?.image_url || './assets/card-back-blue.png';
+  }
+
+  function setCardArtwork(img, card) {
+    const local = cardImageSrc(card);
+    img.dataset.artKey = collectionKey(card);
+    delete img.dataset.fallbackDone;
+    img.onerror = null; img.src = local;
+    if (!card.image || card.image === local || !/^https?:/.test(card.image)) return;
+    const remote = new Image();
+    const timer = setTimeout(() => { remote.onload = null; },3500);
+    remote.onload = () => { clearTimeout(timer); if (img.dataset.artKey === collectionKey(card) && remote.naturalWidth) img.src = remote.src; };
+    remote.onerror = () => clearTimeout(timer); remote.src = card.image;
   }
 
   function cardMetaText(card) {
@@ -304,9 +341,7 @@
     if (!card || !els.detailModal) return;
     const qty = Number(state.collection[collectionKey(card)]) || 0;
     const details = cardChanceDetails(card);
-    const image = cardImageSrc(card);
-    els.detailCardImage.onerror = () => { els.detailCardImage.src = card.fallbackImage || './assets/card-back-blue.png'; };
-    els.detailCardImage.src = image;
+    setCardArtwork(els.detailCardImage,card);
     els.detailCardImage.alt = card.name;
     els.detailCardBack.style.backgroundImage = `url("${card.backImage || './assets/card-back-blue.png'}")`;
     els.detailCard.dataset.holo = card.holoStyle || 'none';
@@ -336,7 +371,10 @@
       <div class="chance-row"><span>Taille du pool</span><b>${details.poolSize} carte${details.poolSize > 1 ? 's' : ''}</b></div>
       <p class="chance-note">${escapeHtml(details.note)}</p>`;
 
+    modalReturnFocus = document.activeElement;
     els.detailModal.hidden = false;
+    document.querySelector('.app-shell').inert = true;
+    els.detailClose.focus();
     els.detailModal.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
   }
@@ -346,12 +384,15 @@
     els.detailModal.hidden = true;
     els.detailModal.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
+    document.querySelector('.app-shell').inert = false;
+    modalReturnFocus?.focus({preventScroll:true});
   }
 
   function openOptionsMenu() {
     if (!els.optionsMenu || !els.optionsBtn) return;
     els.optionsMenu.hidden = false;
     els.optionsBtn.setAttribute('aria-expanded', 'true');
+    els.soundToggleBtn.focus();
   }
 
   function closeOptionsMenu() {
@@ -370,6 +411,8 @@
   function openResetConfirmation() {
     closeOptionsMenu();
     if (!els.resetModal) return;
+    modalReturnFocus = els.optionsBtn;
+    document.querySelector('.app-shell').inert = true;
     els.resetModal.hidden = false;
     els.resetModal.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
@@ -380,7 +423,8 @@
     if (!els.resetModal) return;
     els.resetModal.hidden = true;
     els.resetModal.setAttribute('aria-hidden', 'true');
-    if (els.detailModal?.hidden !== false) document.body.style.overflow = '';
+    if (els.detailModal?.hidden !== false) { document.body.style.overflow = ''; document.querySelector('.app-shell').inert = false; }
+    modalReturnFocus?.focus({preventScroll:true});
   }
 
   function showResetToast() {
@@ -396,13 +440,16 @@
   }
 
   function resetAllSimulatorData() {
+    openingToken += 1;
+    stopSounds();
+    state.transitionBusy = false;
     // Ne touche qu'aux données OP17 afin d'éviter d'effacer d'autres apps hébergées sur le même localhost.
     const keys = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
+    for (let i = 0; i < storage.length; i++) {
+      const key = storage.key(i);
       if (key && /^op17[-_]/i.test(key)) keys.push(key);
     }
-    keys.forEach(key => localStorage.removeItem(key));
+    keys.forEach(key => storage.removeItem(key));
 
     state.currentPack = null;
     state.currentPackMode = null;
@@ -421,6 +468,10 @@
     state.lastRevealKey = null;
     state.interactionToken += 1;
     state.isAnimating = false;
+    els.packStage.classList.remove('opening');
+    els.singleModeBtn.disabled = els.displayModeBtn.disabled = els.newDisplayBtn.disabled = false;
+    els.openingPanel.setAttribute('aria-busy','false');
+    syncMotion();
     if (state.cards.length) state.engine = new window.OP17BoosterEngine(state.cards, state.rates);
 
     if (els.skipPackAnimation) els.skipPackAnimation.checked = false;
@@ -455,7 +506,7 @@
       els.detailCard.style.setProperty('--my', `${(py * 100).toFixed(2)}%`);
       els.detailTiltLayer.style.transform = `rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg)`;
     };
-    els.detailViewer.onpointermove = (event) => update(event.clientX, event.clientY);
+    els.detailViewer.onpointermove = (event) => { if (!reducedMotion()) update(event.clientX, event.clientY); };
     els.detailViewer.onpointerleave = () => { els.detailTiltLayer.style.transform = 'rotateX(0deg) rotateY(0deg)'; els.detailCard.style.setProperty('--mx', '50%'); els.detailCard.style.setProperty('--my', '50%'); };
   }
 
@@ -470,31 +521,71 @@
     success:  { src:'./assets/audio/display_success.wav',  volume:.52 },
   };
 
+  // One unlocked audio context, decoded buffers and a shared volume bus.
+  // HTMLAudio remains available for direct file:// use.
+  const activeSounds = new Set();
+  const sfxBuffers = new Map();
+  let audioContext, masterGain;
+  function syncAudioVolume() {
+    const volume = state.sfxEnabled ? state.sfxVolume : 0;
+    if (masterGain) masterGain.gain.setTargetAtTime(volume, audioContext.currentTime, .025);
+    activeSounds.forEach(item => { if (item.audio) item.audio.volume = volume * item.gain; });
+    if (!volume) stopSounds();
+  }
+  function stopSounds() {
+    activeSounds.forEach(item => { try { item.source?.stop(); item.audio?.pause(); } catch {} });
+    activeSounds.clear();
+  }
+  function unlockAudio() {
+    try {
+      if (!audioContext && location.protocol !== 'file:') {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        audioContext = new AudioCtx();
+        masterGain = audioContext.createGain(); masterGain.connect(audioContext.destination);
+        masterGain.gain.value = state.sfxEnabled ? state.sfxVolume : 0;
+        Object.entries(SFX_LIBRARY).forEach(async ([name,config]) => {
+          try { const response = await fetch(config.src); if (!response.ok) return;
+            sfxBuffers.set(name, await audioContext.decodeAudioData(await response.arrayBuffer())); } catch {}
+        });
+      }
+      if (audioContext?.state === 'suspended') audioContext.resume().catch(() => {});
+    } catch {}
+  }
   function preloadSfx() {
-    Object.entries(SFX_LIBRARY).forEach(([name, config]) => {
-      try {
-        const audio = new Audio(config.src);
-        audio.preload = 'auto';
-        state.sfxPool[name] = audio;
-      } catch (_) {}
+    Object.entries(SFX_LIBRARY).forEach(([name,config]) => {
+      const audio = new Audio(config.src); audio.preload = 'auto'; state.sfxPool[name] = audio;
     });
   }
-
   function playSfx(name, options = {}) {
-    if (!state.sfxEnabled) return;
-    const config = SFX_LIBRARY[name];
-    if (!config) return;
+    if (!state.sfxEnabled || !state.sfxVolume || document.hidden) return;
+    unlockAudio();
+    const config = SFX_LIBRARY[name]; if (!config) return;
+    const gainValue = clamp((options.volume ?? 1) * config.volume, 0, 1);
+    if (activeSounds.size >= 6) { const oldest = activeSounds.values().next().value;
+      try { oldest.source?.stop(); oldest.audio?.pause(); } catch {} activeSounds.delete(oldest); }
     try {
-      const base = state.sfxPool[name] || new Audio(config.src);
-      const audio = base.cloneNode(true);
-      audio.volume = clamp((options.volume ?? 1) * config.volume * state.sfxVolume, 0, 1);
-      audio.playbackRate = clamp(options.rate ?? 1, .75, 1.35);
-      const promise = audio.play();
-      if (promise?.catch) promise.catch(() => {});
-    } catch (_) {}
+      if (sfxBuffers.has(name) && audioContext.state === 'running') {
+        const source = audioContext.createBufferSource(), gain = audioContext.createGain();
+        source.buffer = sfxBuffers.get(name); source.playbackRate.value = clamp(options.rate ?? 1,.8,1.2);
+        gain.gain.value = gainValue; source.connect(gain); gain.connect(masterGain);
+        const item = {source}; activeSounds.add(item);
+        source.onended = () => { activeSounds.delete(item); source.disconnect(); gain.disconnect(); }; source.start();
+      } else {
+        const audio = (state.sfxPool[name] || new Audio(config.src)).cloneNode(true);
+        audio.volume = gainValue * state.sfxVolume; audio.playbackRate = clamp(options.rate ?? 1,.8,1.2);
+        const item = {audio, gain:gainValue}; activeSounds.add(item);
+        audio.onended = audio.onerror = () => activeSounds.delete(item);
+        audio.play()?.catch(() => activeSounds.delete(item));
+      }
+    } catch {}
   }
+  document.addEventListener('pointerdown', unlockAudio, {capture:true});
+  document.addEventListener('keydown', unlockAudio, {capture:true});
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stopSounds(); });
 
   function updateSoundToggle() {
+    syncAudioVolume();
     if (!els.soundToggleBtn) return;
     const audible = state.sfxEnabled && state.sfxVolume > 0;
     els.soundToggleBtn.setAttribute('aria-pressed', audible ? 'true' : 'false');
@@ -513,8 +604,8 @@
     const normalized = clamp(Number(value) / 100, 0, 1);
     state.sfxVolume = normalized;
     if (normalized > 0) state.sfxEnabled = true;
-    localStorage.setItem(SFX_VOLUME_KEY, String(normalized));
-    localStorage.setItem(SFX_ENABLED_KEY, state.sfxEnabled ? '1' : '0');
+    storage.setItem(SFX_VOLUME_KEY, String(normalized));
+    storage.setItem(SFX_ENABLED_KEY, state.sfxEnabled ? '1' : '0');
     updateSoundToggle();
     if (preview && normalized > 0) playSfx('ui', { volume:.55 });
   }
@@ -529,8 +620,8 @@
       state.sfxEnabled = true;
       playSfx('ui', { volume:.55 });
     }
-    localStorage.setItem(SFX_ENABLED_KEY, state.sfxEnabled ? '1' : '0');
-    localStorage.setItem(SFX_VOLUME_KEY, String(state.sfxVolume));
+    storage.setItem(SFX_ENABLED_KEY, state.sfxEnabled ? '1' : '0');
+    storage.setItem(SFX_VOLUME_KEY, String(state.sfxVolume));
     updateSoundToggle();
   }
 
@@ -561,6 +652,8 @@
   }
 
   function resetCardTransforms() {
+    previewHeld = false;
+    els.previewCardBtn.setAttribute('aria-pressed', 'false');
     els.dragLayer.style.transition = '';
     els.dragLayer.style.transform = '';
     els.dragLayer.style.opacity = '1';
@@ -574,26 +667,21 @@
   }
 
   function prepareCard(card) {
-    const image = cardImageSrc(card);
-    els.activeCardImage.onerror = () => {
-      const fallback = card.fallbackImage || './assets/card-back-blue.png';
-      if (els.activeCardImage.src !== new URL(fallback, location.href).href) {
-        els.activeCardImage.onerror = () => { els.activeCardImage.onerror = null; els.activeCardImage.src = './assets/card-back-blue.png'; };
-        els.activeCardImage.src = fallback;
-      }
-    };
-    els.activeCardImage.src = image;
+    setCardArtwork(els.activeCardImage,card);
     els.activeCardImage.alt = card.name;
     els.cardBack.style.backgroundImage = `url("${card.backImage || './assets/card-back-blue.png'}")`;
     const nextCard = !state.inspectCard ? state.currentPack?.[state.cardIndex + 1] : null;
+    els.previewCardBtn.hidden = !nextCard;
     if (nextCard) {
-      const nextImage = cardImageSrc(nextCard);
-      els.nextCardBack.style.backgroundImage = `url("${nextImage}")`;
+      const previewImage = els.nextCardBack.querySelector('img');
+      setCardArtwork(previewImage, nextCard);
       els.nextCardBack.hidden = false;
-      els.nextCardBack.setAttribute('aria-label', `Carte suivante : ${nextCard.name || ''}`);
+      els.nextCardBack.setAttribute('aria-hidden', 'true');
     } else {
       els.nextCardBack.hidden = true;
-      els.nextCardBack.style.backgroundImage = '';
+      const previewImage = els.nextCardBack.querySelector('img');
+      previewImage.dataset.artKey = '';
+      previewImage.removeAttribute('src');
     }
     els.activeCard.dataset.holo = card.holoStyle || 'none';
     els.cardMeta.innerHTML = cardMetaText(card);
@@ -602,8 +690,14 @@
     els.cardReveal.classList.toggle('inspect-mode', Boolean(state.inspectCard));
     els.revealHint.textContent = state.inspectCard
       ? 'Carte inspectée en détail. Déplace ta souris pour faire tourner la carte.'
-      : 'Glisse vers le bas sur le tapis pour sauvegarder la carte. Glisse vers la droite pour passer à la suivante.';
+      : 'Glisse vers le haut pour prévisualiser, à droite pour avancer. Toutes les cartes sont dans ta collection.';
     els.returnFromInspect.hidden = !state.inspectCard;
+    els.nextCardBtn.textContent = state.cardIndex === state.currentPack?.length - 1 ? 'Voir le bilan →' : 'Carte suivante →';
+    $('#revealProgressFill').style.width = ((state.cardIndex + 1) / (state.currentPack?.length || 12) * 100) + '%';
+    $('.reveal-progress').setAttribute('aria-valuenow', String(state.cardIndex + 1));
+    els.viewer.dataset.reveal = isUltraReveal(card) ? 'ultra' : isRareReveal(card) ? 'rare' : 'standard';
+    const upcoming = state.currentPack?.[state.cardIndex + 1];
+    if (upcoming) { const prefetch = new Image(); prefetch.src = cardImageSrc(upcoming); }
   }
 
   function animateFlipIn(card) {
@@ -620,31 +714,36 @@
   function showCurrentCard({ flip = true } = {}) {
     const card = currentCard();
     if (!card) { finishPack(); return; }
+    setRevealBusy(false);
     showOnly('card');
     if (flip) animateFlipIn(card);
     else { prepareCard(card); resetCardTransforms(); }
+    state.transitionBusy = false;
+    setRevealBusy(false);
+    if (!reducedMotion()) {
+      els.flipLayer.getAnimations().forEach(animation => animation.cancel());
+      els.flipLayer.animate([{opacity:0,transform:'translateY(14px) rotateY(-12deg) scale(.97)'},{opacity:1,transform:'none'}], {duration:isUltraReveal(card)?650:320,easing:'cubic-bezier(.2,.8,.2,1)'});
+    }
     attachViewerInteraction();
     playCardRevealSfx(card);
   }
 
-  function packAnimation() {
-    return new Promise(resolve => {
-      playSfx('pack');
-      if (state.openingMode === 'display' || els.skipPackAnimation.checked || window.matchMedia('(prefers-reduced-motion: reduce)').matches) { resolve(); return; }
-      state.isAnimating = true;
-      els.packStage.classList.remove('idle');
-      els.packStage.classList.add('opening');
-      setTimeout(() => {
-        els.packStage.classList.remove('opening');
-        els.packStage.classList.add('idle');
-        state.isAnimating = false;
-        resolve();
-      }, 790);
-    });
+  async function packAnimation() {
+    playSfx('pack');
+    if (els.skipPackAnimation.checked || reducedMotion()) return;
+    // The same opening ceremony is used for single and display boosters.
+    els.singleModePanel.hidden = false; els.displayModePanel.hidden = true;
+    els.packStage.classList.remove('idle'); els.packStage.classList.add('opening');
+    await delay(850);
+    els.packStage.classList.remove('opening'); els.packStage.classList.add('idle');
   }
 
   async function openPreparedPack(pack, sourceMode) {
     if (!pack || state.isAnimating) return;
+    const token = ++openingToken;
+    state.isAnimating = true;
+    els.openingPanel.setAttribute('aria-busy','true');
+    els.singleModeBtn.disabled = els.displayModeBtn.disabled = els.newDisplayBtn.disabled = true;
     state.inspectCard = null;
     state.currentPack = pack;
     state.currentPackMode = sourceMode;
@@ -653,24 +752,29 @@
 
     if (sourceMode === 'display') {
       state.displayOpenedTotal += 1;
-      localStorage.setItem(DISPLAY_OPENED_TOTAL_KEY, String(state.displayOpenedTotal));
+      storage.setItem(DISPLAY_OPENED_TOTAL_KEY, String(state.displayOpenedTotal));
     } else {
       state.randomOpened += 1;
-      localStorage.setItem(RANDOM_OPENED_KEY, String(state.randomOpened));
+      storage.setItem(RANDOM_OPENED_KEY, String(state.randomOpened));
     }
 
     registerPackPull(pack);
     updatePersistentHud();
     if (sourceMode === 'display') setDisplayCounter();
     els.openBoosterBtn.disabled = true;
+    pack.forEach(card => { const image = new Image(); image.src = cardImageSrc(card); });
     await packAnimation();
+    if (token !== openingToken) return;
+    state.isAnimating = false;
+    els.openingPanel.setAttribute('aria-busy','false');
+    els.singleModeBtn.disabled = els.displayModeBtn.disabled = els.newDisplayBtn.disabled = false;
     els.openBoosterBtn.disabled = false;
     if (els.skipCardReveal.checked) finishPack();
     else showCurrentCard({ flip: false });
   }
 
   async function openBooster() {
-    if (!state.engine || state.isAnimating) return;
+    if (!state.engine || state.isAnimating || isOpeningPack()) return;
     // IMPORTANT : le mode Booster ne touche jamais à la display.
     const pack = state.engine.randomPack();
     await openPreparedPack(pack, 'single');
@@ -845,8 +949,9 @@
 
   function renderBoosterSummary() {
     els.summaryKicker.textContent = 'BOOSTER OUVERT';
-    els.summaryTitle.textContent = 'Voici tes 12 cartes';
-    els.openAnotherLabel.textContent = 'Ouvrir un autre booster';
+    els.summaryTitle.textContent = `Tes ${state.currentPack?.length || 12} nouvelles cartes`;
+    els.openAnotherLabel.textContent = state.currentPackMode === 'display' ? 'Choisir le prochain booster' : 'Ouvrir un autre booster';
+    els.openAnotherLabel.textContent = state.currentPackMode === 'display' ? 'Choisir le prochain booster' : 'Ouvrir un autre booster';
     els.displayRecapStats.hidden = true;
     els.displayRecapStats.innerHTML = '';
     els.summaryCards.classList.remove('display-best-cards');
@@ -860,6 +965,8 @@
   }
 
   function finishPack() {
+    state.transitionBusy = false;
+    setRevealBusy(false);
     state.inspectCard = null;
     if (state.currentPack) state.cardIndex = state.currentPack.length;
     if (state.currentPackMode === 'display') setDisplayCounter();
@@ -885,18 +992,25 @@
     renderOpeningMode();
   }
 
-  function advanceCard(direction = 1) {
-    if (!isOpeningPack()) return;
-    playSfx('swipe', { rate: direction > 0 ? 1.02 : .96 });
-    const distance = Math.max(window.innerWidth * .38, 420);
-    els.dragLayer.style.transition = 'transform .22s cubic-bezier(.3,.7,.2,1), opacity .2s ease';
-    els.dragLayer.style.transform = `translate3d(${direction * distance}px,-18px,0)`;
-    els.dragLayer.style.opacity = '0';
-    setTimeout(() => {
-      state.cardIndex += 1;
-      if (state.cardIndex >= state.currentPack.length) finishPack();
-      else showCurrentCard({ flip: false });
-    }, 205);
+  function setRevealBusy(busy) {
+    state.transitionBusy = busy;
+    [els.nextCardBtn,els.keepCardBtn,els.revealAllBtn].forEach(button => button.disabled = busy);
+    els.previewCardBtn.disabled = busy || !state.currentPack?.[state.cardIndex + 1];
+  }
+  async function advanceCard(direction = 1) {
+    if (!isOpeningPack() || state.transitionBusy || state.isAnimating) return;
+    setRevealBusy(true);
+    const token = openingToken;
+    playSfx('swipe', {rate:1.02});
+    if (!reducedMotion()) {
+      els.dragLayer.style.transition = 'transform .2s ease, opacity .18s ease';
+      els.dragLayer.style.transform = 'translate3d(90px,-8px,0) rotate(6deg)';
+      els.dragLayer.style.opacity = '0'; await delay(200);
+    }
+    if (token !== openingToken || !state.currentPack) return;
+    state.cardIndex += 1;
+    if (state.cardIndex >= state.currentPack.length) finishPack();
+    else showCurrentCard({flip:false});
   }
 
   function tableCardWidth() {
@@ -913,7 +1027,9 @@
   }
 
   function animateDropToTable(card, sourceRect, clientX, clientY, rotation, done) {
+    const token = openingToken;
     const tableRect = els.tableSurface.getBoundingClientRect();
+    if (reducedMotion() || tableRect.top >= window.innerHeight || tableRect.bottom <= 0) { addCardAt(card,clientX,clientY,rotation); playSfx('place'); done?.(); return; }
     const width = tableCardWidth();
     const destX = clamp(clientX, tableRect.left + width / 2, tableRect.right - width / 2);
     const destY = clamp(clientY, tableRect.top + width / .715 / 2, tableRect.bottom - width / .715 / 2);
@@ -934,20 +1050,22 @@
       ghost.style.height = `${width / .715}px`;
       ghost.style.transform = `rotate(${clamp(rotation, -16, 16)}deg)`;
     });
-    ghost.addEventListener('transitionend', () => {
-      ghost.remove();
-      addCardAt(card, destX, destY, 0);
-      playSfx('place');
-      done?.();
-    }, { once: true });
+    let completed = false;
+    const complete = () => { if (completed) return; completed = true; clearTimeout(fallback); ghost.remove(); if (token !== openingToken) return; addCardAt(card,destX,destY,rotation); playSfx('place'); done?.(); };
+    const fallback = setTimeout(complete, 400);
+    ghost.addEventListener('transitionend', complete, {once:true});
   }
 
   function dropCurrentOnTable(clientX, clientY, rotation = 0) {
-    if (!isOpeningPack()) return;
+    if (!isOpeningPack() || state.transitionBusy || state.isAnimating) return;
+    setRevealBusy(true);
+    const token = openingToken;
     const card = currentCard();
     const sourceRect = els.activeCard.getBoundingClientRect();
     els.dragLayer.style.opacity = '0';
     animateDropToTable(card, sourceRect, clientX, clientY, rotation, () => {
+      if (token !== openingToken || !state.currentPack) return;
+      toast('Carte posée sur le tapis');
       state.cardIndex += 1;
       if (state.cardIndex >= state.currentPack.length) finishPack();
       else showCurrentCard({ flip: false });
@@ -1029,11 +1147,29 @@
         drag = null;
       };
       button.onpointercancel = () => { drag = null; renderTable(); };
+      button.onclick = event => { if (event.detail === 0 && !event.target.closest('.table-remove')) inspect(state.tableItems[index]?.card); };
+      button.onkeydown = event => { if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); state.tableItems.splice(index,1); renderTable(); toast('Carte retirée du tapis. Elle reste dans la collection.'); } };
     });
   }
 
   function inspect(card) {
     openDetail(card);
+  }
+
+  let previewHeld = false;
+  function beginPreview() {
+    if (!isOpeningPack() || state.isAnimating || state.transitionBusy || !state.currentPack[state.cardIndex + 1]) return;
+    previewHeld = true;
+    els.previewCardBtn.setAttribute('aria-pressed', 'true');
+    els.tiltLayer.style.transform = '';
+    els.dragLayer.style.transition = reducedMotion() ? 'none' : 'transform .16s ease';
+    els.dragLayer.style.transform = 'translate3d(0,-24px,0)';
+    els.viewer.style.setProperty('--peek-height', '24px');
+    els.viewer.classList.add('peeking');
+  }
+
+  function endPreview() {
+    if (previewHeld) resetCardTransforms();
   }
 
   function attachViewerInteraction() {
@@ -1063,7 +1199,7 @@
     };
 
     els.dragLayer.onpointerdown = (event) => {
-      if (state.isAnimating) return;
+      if (state.isAnimating || state.transitionBusy) return;
       if (event.pointerType === 'mouse' && event.button !== 0) return;
       event.preventDefault();
       drag = { startX:event.clientX, startY:event.clientY, lastClientX:event.clientX, lastClientY:event.clientY, base:baseRect(), moved:false, mode:null, autoScrollFrame:null };
@@ -1080,7 +1216,10 @@
     };
 
     els.dragLayer.onpointermove = (event) => {
-      if (!drag) return;
+      if (!drag) {
+        if (event.pointerType === 'mouse' && !reducedMotion()) { const r = baseRect(); const x = clamp((event.clientX-r.left)/r.width,0,1), y = clamp((event.clientY-r.top)/r.height,0,1); els.tiltLayer.style.transform = `rotateX(${(0.5-y)*9}deg) rotateY(${(x-0.5)*12}deg)`; els.activeCard.style.setProperty('--mx',`${x*100}%`); els.activeCard.style.setProperty('--my',`${y*100}%`); }
+        return;
+      }
       const dx = event.clientX - drag.startX;
       const dy = event.clientY - drag.startY;
       drag.lastClientX = event.clientX;
@@ -1111,6 +1250,7 @@
         els.viewer.classList.remove('peeking', 'horizontal-swipe', 'swipe-left', 'swipe-right');
         if (!drag.autoScrollFrame) drag.autoScrollFrame = requestAnimationFrame(keepTableReachable);
       } else if (drag.mode === 'peek') {
+        if (!state.currentPack?.[state.cardIndex + 1]) { resetCardTransforms(); return; }
         // V11.6 : le peek vertical reste discret.
         // On montre seulement un petit bord de la prochaine carte, sans aller jusqu'au nom.
         const upward = Math.max(0, -dy);
@@ -1187,6 +1327,8 @@
   function renderOpeningMode() {
     const isDisplay = state.openingMode === 'display';
     els.singleModeBtn.classList.toggle('active', !isDisplay);
+    els.singleModeBtn.setAttribute('aria-pressed',String(!isDisplay));
+    els.displayModeBtn.setAttribute('aria-pressed',String(isDisplay));
     els.displayModeBtn.classList.toggle('active', isDisplay);
     els.singleModePanel.hidden = isDisplay;
     els.displayModePanel.hidden = !isDisplay;
@@ -1195,8 +1337,9 @@
   }
 
   function setOpeningMode(mode) {
+    if (state.isAnimating || state.transitionBusy) return;
     state.openingMode = mode === 'display' ? 'display' : 'single';
-    localStorage.setItem(MODE_KEY, state.openingMode);
+    storage.setItem(MODE_KEY, state.openingMode);
     renderOpeningMode();
   }
 
@@ -1238,9 +1381,9 @@
   function renderCatalog() {
     const query = (els.cardSearch.value || '').trim().toLowerCase();
     const filtered = state.cards.filter(card => !query || `${card.name} ${card.code} ${card.rarity} ${card.variant}`.toLowerCase().includes(query));
-    els.catalogSummary.textContent = `${filtered.length} carte${filtered.length > 1 ? 's' : ''} · Dataset : ${state.source}`;
-    els.cardCatalog.innerHTML = filtered.slice(0, 120).map(card => `
-      <article class="catalog-card" tabindex="0" data-card-key="${escapeHtml(collectionKey(card))}">
+    els.catalogSummary.textContent = filtered.length ? `${filtered.length} carte${filtered.length > 1 ? 's' : ''} à découvrir` : 'Aucune carte trouvée. Essaie un autre nom, numéro ou une rareté.';
+    els.cardCatalog.innerHTML = filtered.map(card => `
+      <article class="catalog-card" role="button" tabindex="0" data-card-key="${escapeHtml(collectionKey(card))}">
         <div class="catalog-thumb">${cardImageSrc(card) ? `<img src="${escapeHtml(cardImageSrc(card))}" alt="${escapeHtml(card.name)}" loading="lazy">` : ''}${rarityBadge(card, true)}</div>
         <div class="catalog-meta">
           <b>${escapeHtml(card.name)}</b>
@@ -1284,7 +1427,7 @@
     const pageCards = ordered.slice(state.binderPage * perPage, state.binderPage * perPage + perPage);
     els.binderGrid.innerHTML = pageCards.map(card => {
       const qty = Number(state.collection[collectionKey(card)]) || 0;
-      return `<article class="binder-slot ${qty ? '' : 'locked'}" tabindex="0" data-card-key="${escapeHtml(collectionKey(card))}">
+      return `<article class="binder-slot ${qty ? '' : 'locked'}" role="button" tabindex="0" data-card-key="${escapeHtml(collectionKey(card))}">
         <div class="binder-pocket">
           ${qty && cardImageSrc(card) ? `<img src="${escapeHtml(cardImageSrc(card))}" alt="${escapeHtml(card.name)}">` : ''}
           ${rarityBadge(card, true)}
@@ -1311,7 +1454,7 @@
     els.binderPrev.disabled = true;
     els.binderNext.disabled = true;
 
-    if (page?.animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (page?.animate && !reducedMotion()) {
       const exitX = delta > 0 ? -34 : 34;
       const exitRot = delta > 0 ? -7 : 7;
       await page.animate([
@@ -1341,9 +1484,11 @@
     els.infoScreen.classList.toggle('active', info);
     els.collectionScreen.classList.toggle('active', collection);
     els.historyScreen?.classList.toggle('active', history);
-    els.tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.tab === tabName));
+    els.tabs.forEach(tab => { tab.classList.toggle('active', tab.dataset.tab === tabName); if (tab.dataset.tab === tabName) tab.setAttribute('aria-current','page'); else tab.removeAttribute('aria-current'); });
+    if (opening) requestAnimationFrame(renderTable);
     if (collection) renderBinder();
     if (history) renderHistory();
+    window.scrollTo({top:0,behavior:'instant'});
   }
 
   async function init() {
@@ -1353,7 +1498,8 @@
       state.rates = result.rates;
       state.source = result.source;
       state.engine = new window.OP17BoosterEngine(state.cards, state.rates);
-      els.dataStatus.textContent = `${state.cards.length} cartes/variantes chargées · ${state.source}` + (location.protocol === 'file:' ? ' · mode direct OK' : '');
+      els.dataStatus.textContent = `${state.cards.length} cartes et variantes · Sauvegarde sur cet appareil`;
+      els.dataStatus.classList.add('ready');
       els.openBoosterBtn.disabled = false;
       setDisplayCounter();
       renderRates();
@@ -1377,9 +1523,71 @@
     attachDetailInteraction();
   }
 
+  function syncMotion() {
+    const saved = storage.getItem('op17-v14-reduced-motion');
+    const reduced = motionQuery.matches || saved === '1';
+    document.documentElement.dataset.motion = reduced ? 'reduced' : 'full';
+    els.reduceMotion.checked = reduced;
+  }
+  syncMotion(); motionQuery.addEventListener('change',syncMotion);
+  els.reduceMotion.addEventListener('change', () => { storage.setItem('op17-v14-reduced-motion',els.reduceMotion.checked?'1':'0'); syncMotion(); });
+  els.skipPackAnimation.checked = storage.getItem('op17-v10-skip-pack') === '1';
+  els.skipCardReveal.checked = storage.getItem('op17-v10-skip-cards') === '1';
+  els.tabs[0].setAttribute('aria-current','page');
+  els.nextCardBtn.addEventListener('click',() => advanceCard());
+  els.previewCardBtn.addEventListener('pointerdown', event => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    event.preventDefault();
+    els.previewCardBtn.setPointerCapture(event.pointerId);
+    beginPreview();
+  });
+  ['pointerup','pointercancel','lostpointercapture','blur'].forEach(name => els.previewCardBtn.addEventListener(name,endPreview));
+  els.previewCardBtn.addEventListener('keydown', event => {
+    if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); beginPreview(); }
+  });
+  els.previewCardBtn.addEventListener('keyup', event => {
+    if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); endPreview(); }
+  });
+  window.addEventListener('blur',endPreview);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) endPreview(); });
+  els.keepCardBtn.addEventListener('click',() => {
+    const r = els.tableSurface.getBoundingClientRect(), n = state.tableItems.length;
+    dropCurrentOnTable(r.left+r.width*(.24+(n%3)*.25),r.top+r.height*(.35+(Math.floor(n/3)%2)*.3));
+  });
+  els.revealAllBtn.addEventListener('click',() => { if (isOpeningPack() && !state.transitionBusy) { playSfx('swipe'); finishPack(); } });
+  document.addEventListener('keydown',event => {
+    const modal = !els.resetModal.hidden ? els.resetModal : !els.detailModal.hidden ? els.detailModal : null;
+    if (modal && event.key === 'Tab') {
+      const focusable = [...modal.querySelectorAll('button:not(:disabled), input, [tabindex="0"]')].filter(el=>el.getClientRects().length);
+      const first=focusable[0], last=focusable[focusable.length-1];
+      if (event.shiftKey && document.activeElement===first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement===last) { event.preventDefault(); first.focus(); }
+      return;
+    }
+    if (modal || !els.optionsMenu.hidden || !els.openingScreen.classList.contains('active') || /INPUT|TEXTAREA|SELECT/.test(event.target.tagName)) return;
+    if (event.key==='ArrowRight' && isOpeningPack()) { event.preventDefault(); advanceCard(); }
+    if (event.key==='ArrowDown' && isOpeningPack()) { event.preventDefault(); els.keepCardBtn.click(); }
+  });
+  // Gallery images use the same progressive artwork without delaying local rendering.
+  document.addEventListener('load', event => {
+    const img = event.target;
+    if (!(img instanceof HTMLImageElement) || img.dataset.artKey) return;
+    const card = state.cards.find(card => card.fallbackImage === img.getAttribute('src'));
+    if (card) setCardArtwork(img,card);
+  }, true);
+  // A single bounded fallback handles missing card images throughout the app.
+  document.addEventListener('error', event => {
+    const img = event.target;
+    if (!(img instanceof HTMLImageElement) || img.dataset.fallbackDone) return;
+    img.dataset.fallbackDone = '1';
+    const card = state.cards.find(card => cardImageSrc(card) === img.getAttribute('src'));
+    img.onerror = null;
+    img.src = card?.fallbackImage && img.getAttribute('src') !== card.fallbackImage ? card.fallbackImage : './assets/card-back-blue.png';
+  }, true);
   els.openBoosterBtn.disabled = true;
   els.openBoosterBtn.addEventListener('click', openBooster);
-  els.openAnotherBtn.addEventListener('click', () => { playSfx('ui'); returnHome(); });
+  $('#changeModeBtn').addEventListener('click', () => { returnHome(); els.singleModeBtn.focus({preventScroll:true}); });
+  els.openAnotherBtn.addEventListener('click', () => { const single = state.currentPackMode !== 'display'; returnHome(); if (single) openBooster(); else { playSfx('ui'); requestAnimationFrame(()=>els.displayPackGrid.querySelector('button:not(:disabled)')?.focus({preventScroll:true})); } });
   els.returnFromInspect.addEventListener('click', () => {
     state.inspectCard = null;
     if (state.currentPack && state.cardIndex < state.currentPack.length) showCurrentCard({ flip: false });
@@ -1400,8 +1608,8 @@
   });
   els.tabs.forEach(tab => tab.addEventListener('click', () => { playSfx('ui'); switchTab(tab.dataset.tab); }));
   els.cardSearch.addEventListener('input', renderCatalog);
-  els.skipPackAnimation.addEventListener('change', () => localStorage.setItem('op17-v10-skip-pack', els.skipPackAnimation.checked ? '1' : '0'));
-  els.skipCardReveal.addEventListener('change', () => localStorage.setItem('op17-v10-skip-cards', els.skipCardReveal.checked ? '1' : '0'));
+  els.skipPackAnimation.addEventListener('change', () => storage.setItem('op17-v10-skip-pack', els.skipPackAnimation.checked ? '1' : '0'));
+  els.skipCardReveal.addEventListener('change', () => storage.setItem('op17-v10-skip-cards', els.skipCardReveal.checked ? '1' : '0'));
   els.singleModeBtn.addEventListener('click', () => { playSfx('ui'); setOpeningMode('single'); });
   els.displayModeBtn.addEventListener('click', () => { playSfx('ui'); setOpeningMode('display'); });
   els.displayPackGrid.addEventListener('click', event => {
@@ -1410,7 +1618,8 @@
     openDisplayPack(Number(button.dataset.packIndex));
   });
   els.newDisplayBtn.addEventListener('click', () => {
-    if (!state.engine || isOpeningPack()) return;
+    if (!state.engine || state.isAnimating || isOpeningPack()) return;
+    if (state.engine.displayInfo().remaining < 24 && state.engine.displayInfo().remaining > 0 && !window.confirm('Recommencer une display ? Les boosters restants seront remplacés. Tes cartes déjà obtenues restent dans la collection.')) return;
     playSfx('ui');
     state.engine.newDisplay();
     state.displayHistoryRecorded = false;
@@ -1460,7 +1669,7 @@
   els.resetConfirmBtn?.addEventListener('click', () => { playSfx('ui'); resetAllSimulatorData(); });
   els.detailClose?.addEventListener('click', closeDetail);
   els.detailBackdrop?.addEventListener('click', closeDetail);
-  window.addEventListener('keydown', event => { if (event.key !== 'Escape') return; if (els.resetModal && !els.resetModal.hidden) closeResetConfirmation(); else if (els.detailModal && !els.detailModal.hidden) closeDetail(); else if (els.optionsMenu && !els.optionsMenu.hidden) closeOptionsMenu(); });
+  window.addEventListener('keydown', event => { if (event.key !== 'Escape') return; if (els.resetModal && !els.resetModal.hidden) closeResetConfirmation(); else if (els.detailModal && !els.detailModal.hidden) closeDetail(); else if (els.optionsMenu && !els.optionsMenu.hidden) { closeOptionsMenu(); els.optionsBtn.focus(); } });
   window.addEventListener('resize', renderTable);
 
   init();

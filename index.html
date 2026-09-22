@@ -2,12 +2,13 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#03182e">
-  <title>OP17 Simulator</title>
-  <link rel="stylesheet" href="./style-v10.css?v=13.10">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#09151b">
+  <title>OP17 · Le plaisir du premier regard</title>
+  <link rel="stylesheet" href="./style-v10.css?v=14.1">
 </head>
 <body>
+<a class="skip-link" href="#openingPanel">Aller à l’ouverture</a>
 <div class="app-shell">
   <header class="topbar">
     <nav class="tabs" aria-label="Navigation principale">
@@ -16,9 +17,9 @@
       <button class="tab" data-tab="collection" type="button"><span class="tab-icon">▤</span><span>Collection</span></button>
       <button class="tab" data-tab="history" type="button"><span class="tab-icon">◷</span><span>Historique</span></button>
     </nav>
-    <h1 class="brand-title">OP17 <span>Simulator</span></h1>
+    <div class="brand-title"><span class="brand-mark" aria-hidden="true">✦</span><span>OP17 <small>SIMULATOR</small></span></div>
     <div class="topbar-actions">
-      <div class="motto" aria-hidden="true">Plus loin que la mer.</div>
+      <div class="motto" aria-hidden="true">ONE PIECE CARD GAME</div>
       <div class="options-dropdown">
         <button id="optionsBtn" class="options-button" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="optionsMenu" title="Options du simulateur">
           <span aria-hidden="true">⚙</span><span>Options</span>
@@ -37,7 +38,10 @@
               </label>
             </div>
           </div>
-          <div class="options-section">
+          <div class="options-section"><div class="options-section-title">Ouverture</div>          <div class="quick-options" aria-label="Options d'ouverture">
+            <label><input id="skipPackAnimation" type="checkbox"><span>Passer l’animation</span></label>
+            <label><input id="skipCardReveal" type="checkbox"><span>Afficher directement le récapitulatif</span></label>
+          </div><label class="motion-option"><input id="reduceMotion" type="checkbox"> Réduire les animations</label></div><div class="options-section">
             <div class="options-section-title">Données</div>
             <button id="resetDataBtn" class="reset-data-button menu-reset" type="button" title="Réinitialiser les données du simulateur">
               <span aria-hidden="true">↺</span><span>Réinitialiser toutes les données</span>
@@ -49,32 +53,13 @@
   </header>
 
   <main id="openingScreen" class="screen active">
+    <div class="page-intro"><div><span class="eyebrow">LES GUERRIERS LES PLUS PUISSANTS AU MONDE</span><h1>La prochaine carte.<br class="mobile-break"> Le prochain trésor.</h1><p>Déchire le booster. Savoure la découverte. Complète ta collection.</p></div><span class="session-badge"><i></i> Simulation gratuite</span></div>
     <div class="opening-layout">
-      <section class="table-frame" aria-label="Table de cartes">
-        <div id="tableSurface" class="table-surface">
-          <div class="table-hud">
-            <span>Boosters ouverts <b id="openedCountTable">0</b></span>
-            <span>Valeur du tapis <b id="tableValue">0,00 €</b></span>
-          </div>
-          <div class="table-decoration table-rope"></div>
-          <div class="table-decoration table-map"></div>
-          <div class="table-decoration table-compass"></div>
-          <div class="table-decoration table-skull"></div>
-          <i class="coin coin-a"></i><i class="coin coin-b"></i><i class="coin coin-c"></i><i class="coin coin-d"></i>
-          <div id="tableCards" class="table-cards"></div>
-          <div id="tableEmpty" class="table-empty">
-            <span class="table-empty-icon">◇</span>
-            <b>Ta table est vide</b>
-            <span>Glisse une carte ici pour la poser.</span>
-          </div>
-        </div>
-      </section>
-
-      <section id="openingPanel" class="opening-panel" aria-live="polite">
+  <section id="openingPanel" class="opening-panel" tabindex="-1">
         <div class="nautical-compass" aria-hidden="true"></div>
         <div class="sea-ship" aria-hidden="true"></div>
 
-        <div id="packHome" class="pack-home">
+        <div id="packHome" class="pack-home"><div class="pack-intro"><span class="eyebrow">L’AVENTURE COMMENCE ICI</span><h2>À toi de jouer.</h2></div>
           <div class="opening-mode-switch" role="group" aria-label="Mode d’ouverture">
             <button id="singleModeBtn" class="mode-button active" type="button">Booster</button>
             <button id="displayModeBtn" class="mode-button" type="button">Display ×24</button>
@@ -92,14 +77,11 @@
             <span class="action-icon">▣</span>
             <span>Ouvrir un booster</span>
           </button>
-          <div class="opening-stats single-opening-stats">
-            <span>Boosters aléatoires ouverts : <b id="openedCount">0</b></span>
+          <p class="pack-caption">12 cartes · Une surprise à chaque ouverture</p><div class="opening-stats single-opening-stats">
+            <span>Boosters ouverts en solo : <b id="openedCount">0</b></span>
           </div>
-          <div class="mode-note">Tirage indépendant : ce mode ne consomme jamais la display.</div>
-          <div class="quick-options" aria-label="Options d'ouverture">
-            <label><input id="skipPackAnimation" type="checkbox"><span>Passer l’animation</span></label>
-            <label><input id="skipCardReveal" type="checkbox"><span>Passer les cartes</span></label>
-          </div>
+          <div class="mode-note">Un booster indépendant, à ton rythme.</div>
+
           <div id="dataStatus" class="data-status">Chargement des données OP17…</div>
           </div>
 
@@ -128,7 +110,7 @@
 
           <div id="viewer" class="card-viewer">
             <div id="swipeShadowStack" class="swipe-shadow-stack" aria-hidden="true"><i></i><i></i><i></i></div>
-            <div id="nextCardBack" class="next-card-back"></div>
+            <div id="nextCardBack" class="next-card-back" aria-hidden="true"><img alt="" draggable="false"></div>
             <div id="dragLayer" class="drag-layer">
               <div id="tiltLayer" class="tilt-layer">
                 <div id="flipLayer" class="flip-layer">
@@ -153,7 +135,8 @@
             <span class="gesture-cue-right">→</span>
           </div>
 
-          <div id="cardMeta" class="card-meta"></div>
+          <div class="reveal-progress" role="progressbar" aria-label="Cartes révélées" aria-valuemin="0" aria-valuemax="12" aria-valuenow="1"><span id="revealProgressFill"></span></div>
+          <div id="cardMeta" class="card-meta" aria-live="polite" aria-atomic="true"></div><div class="reveal-actions"><button id="keepCardBtn" class="secondary-action" type="button">↓ Poser sur le tapis</button><button id="nextCardBtn" class="primary-action" type="button">Carte suivante <span aria-hidden="true">→</span></button></div><button id="previewCardBtn" class="text-action preview-action" type="button" aria-pressed="false">↑ Maintenir pour prévisualiser</button><button id="revealAllBtn" class="text-action" type="button">Voir les cartes restantes</button>
           <div id="revealHint" class="reveal-hint">Glisse vers le bas sur le tapis pour sauvegarder la carte. Glisse vers la droite pour passer à la suivante.</div>
           <button id="returnFromInspect" class="secondary-action" type="button" hidden>Retour au booster</button>
         </div>
@@ -166,9 +149,30 @@
           </div>
           <div id="displayRecapStats" class="display-recap-stats" hidden></div>
           <div id="summaryCards" class="summary-cards"></div>
-          <button id="openAnotherBtn" class="primary-action compact" type="button"><span class="action-icon">▣</span><span id="openAnotherLabel">Ouvrir un autre booster</span></button>
+          <button id="openAnotherBtn" class="primary-action compact" type="button"><span class="action-icon">▣</span><span id="openAnotherLabel">Ouvrir un autre booster</span></button><button id="changeModeBtn" class="text-action" type="button">Retour aux modes d’ouverture</button>
         </div>
       </section>
+      <section class="table-frame" aria-label="Table de cartes"><div class="table-heading"><div><span class="eyebrow">TES COUPS DE CŒUR</span><h2>Le tapis</h2></div><span class="table-caption">Ta sélection de la session</span></div>
+        <div id="tableSurface" class="table-surface">
+          <div class="table-hud">
+            <span>Boosters ouverts <b id="openedCountTable">0</b></span>
+            <span>Valeur du tapis <b id="tableValue">0,00 €</b></span>
+          </div>
+          <div class="table-decoration table-rope"></div>
+          <div class="table-decoration table-map"></div>
+          <div class="table-decoration table-compass"></div>
+          <div class="table-decoration table-skull"></div>
+          <i class="coin coin-a"></i><i class="coin coin-b"></i><i class="coin coin-c"></i><i class="coin coin-d"></i>
+          <div id="tableCards" class="table-cards"></div>
+          <div id="tableEmpty" class="table-empty">
+            <span class="table-empty-icon">◇</span>
+            <b>Les belles trouvailles restent ici</b>
+            <span>Pose tes cartes préférées sur le tapis.<br>Toutes tes cartes rejoignent aussi la collection.</span>
+          </div>
+        </div>
+      </section>
+
+    
     </div>
   </main>
 
@@ -178,17 +182,17 @@
         <div>
           <span class="eyebrow">OP17 · LES GUERRIERS LES PLUS PUISSANTS AU MONDE</span>
           <h2>Cartes & taux de drop</h2>
-          <p>Cette page lit directement les fichiers générés par ton scraper.</p>
+          <p>Explore les cartes de l’extension et les probabilités utilisées par le simulateur.</p>
         </div>
         <div class="info-actions">
-          <input id="cardSearch" class="search" type="search" placeholder="Rechercher une carte…">
+          <input id="cardSearch" class="search" type="search" placeholder="Nom, numéro ou rareté…" aria-label="Rechercher une carte">
         </div>
       </div>
       <div class="info-content">
         <aside class="rate-panel">
           <h3>Distribution observée</h3>
           <div id="rateList" class="rate-list"></div>
-          <p class="rate-note">Audit V11.7 : Bandai ne publie aucun taux numérique officiel. Les valeurs affichées sont des estimations communautaires recoupées, avec les ultra-raretés volontairement calibrées de façon prudente.</p>
+          <p class="rate-note">Bandai ne publie aucun taux numérique officiel. Les valeurs affichées sont des estimations communautaires recoupées, avec les ultra-raretés volontairement calibrées de façon prudente.</p>
         </aside>
         <section>
           <div id="catalogSummary" class="catalog-summary"></div>
@@ -204,7 +208,7 @@
         <div>
           <span class="eyebrow">CLASSEUR OP17</span>
           <h2>Ma collection</h2>
-          <p>Les cartes sont classées par numéro puis par version. Chaque pull est sauvegardé localement.</p>
+          <p>Les cartes sont classées par numéro puis par version. Toutes tes ouvertures sont sauvegardées sur cet appareil.</p>
         </div>
         <div class="collection-stats">
           <span class="pill"><b id="collectionUnique">0</b> uniques</span>
@@ -265,7 +269,7 @@
     </div>
   </div>
 </div>
-<div id="resetToast" class="reset-toast" hidden>Données réinitialisées.</div>
+<div id="resetToast" class="reset-toast" role="status" hidden>Données réinitialisées.</div>
 
 <div id="detailModal" class="detail-modal" hidden aria-hidden="true">
   <div id="detailBackdrop" class="detail-backdrop"></div>
@@ -319,9 +323,11 @@
   </div>
 </div>
 
+<div id="appToast" class="app-toast" role="status" hidden></div>
 <script src="./embedded-data.js"></script>
 <script src="./data-loader.js"></script>
 <script src="./booster-engine.js"></script>
-<script src="./app-v10.js?v=13.10"></script>
+<script src="./app-v10.js?v=14.1"></script>
 </body>
 </html>
+
